@@ -101,9 +101,12 @@ app.get("/images/:id", async (c) => {
   return serveImage(c, row.key);
 });
 
-app.get("/images/:id/marked", (c) =>
-  serveImage(c, markedKey(c.req.param("id"))),
-);
+app.get("/images/:id/marked/:version", async (c) => {
+  const id = c.req.param("id");
+  const row = await getDb().query.images.findFirst({ where: { id } });
+  if (!row) return c.notFound();
+  return serveImage(c, markedKey(id, Number(c.req.param("version"))));
+});
 
 app.get("/", (c) => {
   return c.text("OK");

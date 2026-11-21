@@ -35,6 +35,7 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
       }
       return client.images.saveMarkers({
         id,
+        version,
         width: found.width,
         height: found.height,
         reference: found.reference,
@@ -76,8 +77,8 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
           <div className="relative overflow-hidden rounded-lg border">
             <img
               src={
-                analysis?.markedKey && !measure.isPending
-                  ? markedUrl(image.data.id, image.dataUpdatedAt)
+                analysis?.markedVersion && !measure.isPending
+                  ? markedUrl(image.data.id, analysis.markedVersion)
                   : imageUrl(image.data.id)
               }
               alt={image.data.filename}

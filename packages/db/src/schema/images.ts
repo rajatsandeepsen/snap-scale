@@ -21,8 +21,8 @@ export type Analysis = {
   notes: string;
   model: string;
   durationMs: number;
-  /** R2 key of the gpt-image copy with marker dots; corners are in its pixels. */
-  markedKey?: string;
+  /** Version of the gpt-image copy with marker dots; corners are in its pixels. */
+  markedVersion?: number;
 };
 
 export const images = sqliteTable("images", {

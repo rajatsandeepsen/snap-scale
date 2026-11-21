@@ -17,7 +17,9 @@ import { drawMarkers, IMAGE_MODEL } from "../measure/markers";
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-export const markedKey = (id: string) => `marked/${id}.png`;
+// Each measure run writes its own copy so overlapping runs cannot mix.
+export const markedKey = (id: string, version: number) =>
+  `marked/${id}/${version}.png`;
 
 type PendingMarkers = Identification & { durationMs: number };
 
@@ -123,11 +125,12 @@ export const imagesRouter = {
         ...identification,
         durationMs: Date.now() - started,
       };
-      await context.images.put(markedKey(row.id), marked, {
+      const version = Date.now();
+      await context.images.put(markedKey(row.id, version), marked, {
         httpMetadata: { contentType: "image/png" },
         customMetadata: { pending: JSON.stringify(pending) },
       });
-      return { ...pending, version: Date.now() };
+      return { ...pending, version };
     }),
 
   /** Saves the dot positions the browser found; the size is computed here. */
@@ -135,6 +138,7 @@ export const imagesRouter = {
     .input(
       z.object({
         id: z.string(),
+        version: z.number().int(),
         width: z.number().positive(),
         height: z.number().positive(),
         reference: z.array(point).length(4),
@@ -142,7 +146,7 @@ export const imagesRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
-      const key = markedKey(input.id);
+      const key = markedKey(input.id, input.version);
       const head = await context.images.head(key);
       const raw = head?.customMetadata?.pending;
       if (!raw) throw new ORPCError("NOT_FOUND");
@@ -166,7 +170,7 @@ export const imagesRouter = {
         notes: pending.notes,
         model: `${MODEL} + ${IMAGE_MODEL}`,
         durationMs: pending.durationMs,
-        markedKey: key,
+        markedVersion: input.version,
       };
       const [updated] = await context.db
         .update(images)
@@ -185,7 +189,11 @@ export const imagesRouter = {
         .from(images)
         .where(eq(images.id, input.id));
       if (!row) throw new ORPCError("NOT_FOUND");
-      await context.images.delete([row.key, markedKey(row.id)]);
+      const marked = await context.images.list({ prefix: `marked/${row.id}/` });
+      await context.images.delete([
+        row.key,
+        ...marked.objects.map((o) => o.key),
+      ]);
       await context.db.delete(images).where(eq(images.id, input.id));
       return { id: input.id };
     }),
