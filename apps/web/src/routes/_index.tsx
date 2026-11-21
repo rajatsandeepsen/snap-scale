@@ -80,12 +80,12 @@ export default function Home() {
           <ImageUpIcon className="size-6" />
         )}
         <span>{upload.isPending ? "Uploading..." : "Drop an image or click to choose"}</span>
-        <span className="text-muted-foreground text-xs">JPEG, PNG, WebP or HEIC, up to 10 MB</span>
+        <span className="text-muted-foreground text-xs">JPEG, PNG or WebP, up to 10 MB</span>
       </button>
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic"
+        accept="image/jpeg,image/png,image/webp"
         capture="environment"
         className="hidden"
         onChange={(e: ChangeEvent<HTMLInputElement>) => {

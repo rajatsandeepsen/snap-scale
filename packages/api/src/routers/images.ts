@@ -6,7 +6,7 @@ import { z } from "zod";
 import { publicProcedure } from "../index";
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export const imagesRouter = {
   upload: publicProcedure
