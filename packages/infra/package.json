@@ -6,7 +6,7 @@
     "check-types": "tsc --noEmit",
     "dev": "alchemy dev",
     "deploy": "alchemy deploy --stage prod --yes",
-    "destroy": "alchemy destroy --stage prod"
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
     "zod": "catalog:"
