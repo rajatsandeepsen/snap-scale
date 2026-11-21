@@ -51,7 +51,7 @@ export function StepCard({
 }) {
   return (
     <div
-      className={`mx-auto grid w-full gap-4 rounded-3xl border border-neutral-200 bg-white p-6 shadow-[0_10px_40px_-12px_rgba(0,0,0,0.18)] ${wide ? "max-w-2xl" : "max-w-md"}`}
+      className={`mx-auto grid w-full gap-4 rounded-3xl border border-neutral-200 bg-white p-5 sm:p-6 shadow-[0_10px_40px_-12px_rgba(0,0,0,0.18)] ${wide ? "max-w-2xl" : "max-w-md"}`}
     >
       <div className="grid gap-1">
         {step && (

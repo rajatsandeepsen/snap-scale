@@ -46,6 +46,7 @@ export function NextActions({
   const near = COMMON_RATIOS.find(([, r]) => Math.abs(ratio / r - 1) < 0.03);
   const L = formatLength(lengthMm, unit);
   const W = formatLength(widthMm, unit);
+  const num = (mm: number) => (mm / UNITS[unit].mm).toFixed(UNITS[unit].digits);
 
   const actions = [
     { key: "area", label: "Area", value: formatArea(lengthMm * widthMm, unit), how: `${L} × ${W}` },
@@ -53,7 +54,7 @@ export function NextActions({
       key: "diagonal",
       label: "Diagonal length",
       value: formatLength(Math.hypot(lengthMm, widthMm), unit),
-      how: `√(${L}² + ${W}²)`,
+      how: `√(${num(lengthMm)}² + ${num(widthMm)}²) ${unit}`,
     },
     {
       key: "perimeter",
@@ -95,14 +96,14 @@ export function NextActions({
       >
         <CopyIcon className="size-4" /> Copy dimensions
       </button>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:flex">
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeftIcon /> Back
         </Button>
         <Button variant="outline" onClick={onRemeasure}>
           <RulerIcon /> Measure again
         </Button>
-        <Button className="ml-auto" onClick={() => navigate("/")}>
+        <Button className="col-span-2 sm:ml-auto" onClick={() => navigate("/")}>
           <CameraIcon /> New photo
         </Button>
       </div>

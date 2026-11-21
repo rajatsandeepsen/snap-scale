@@ -1,10 +1,11 @@
 import { Button } from "@snap-scale/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { CameraIcon, ImageUpIcon, Loader2 } from "lucide-react";
-import { type DragEvent, useRef, useState } from "react";
+import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
+import { Webcam } from "@/components/webcam";
 import { orpc } from "@/utils/orpc";
 
 export function meta() {
@@ -19,6 +20,7 @@ export default function Home() {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [webcam, setWebcam] = useState(false);
 
   const upload = useMutation(
     orpc.images.upload.mutationOptions({
@@ -30,6 +32,18 @@ export default function Home() {
     const file = files?.[0];
     if (file) upload.mutate({ file });
   };
+  // Phones open the camera straight from a capture input; desktops get a live webcam view.
+  const openCamera = () => {
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    if (!touch && "getUserMedia" in (navigator.mediaDevices ?? {})) setWebcam(true);
+    else cameraRef.current?.click();
+  };
+  const webcamUnavailable = useCallback(() => {
+    setWebcam(false);
+    toast.error("Camera unavailable, choose an image instead");
+    fileRef.current?.click();
+  }, []);
+  const closeWebcam = useCallback(() => setWebcam(false), []);
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragging(false);
@@ -39,7 +53,7 @@ export default function Home() {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: whole-page drop target; the buttons are the accessible way in
     <div
-      className="grid min-h-svh place-items-center p-6"
+      className="grid min-h-svh place-items-center p-4 sm:p-6"
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -48,7 +62,7 @@ export default function Home() {
       onDrop={onDrop}
     >
       <div
-        className={`animate-in fade-in zoom-in-95 grid w-full max-w-md justify-items-center gap-6 rounded-3xl border-2 border-dashed p-10 text-center duration-500 ${dragging ? "border-neutral-900 bg-neutral-50" : "border-neutral-200"}`}
+        className={`animate-in fade-in zoom-in-95 grid w-full max-w-md justify-items-center gap-6 rounded-3xl border-2 border-dashed p-8 text-center sm:p-10 duration-500 ${dragging ? "border-neutral-900 bg-neutral-50" : "border-neutral-200"}`}
       >
         {upload.isPending ? (
           <Loader2 className="size-10 animate-spin text-neutral-400" />
@@ -57,26 +71,49 @@ export default function Home() {
         )}
         <div className="grid gap-1">
           <p className="text-lg font-medium">
-            {upload.isPending ? "Uploading…" : "Drop an image here"}
+            {upload.isPending ? (
+              "Uploading…"
+            ) : (
+              <>
+                <span className="sm:hidden">Snap a photo</span>
+                <span className="hidden sm:inline">Drop an image here</span>
+              </>
+            )}
           </p>
           <p className="text-sm text-neutral-500">
             Include a card, coin or sheet of paper next to the object
           </p>
         </div>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button size="lg" disabled={upload.isPending} onClick={() => fileRef.current?.click()}>
+        <div className="grid w-full gap-2 sm:flex sm:w-auto sm:justify-center">
+          <Button
+            size="lg"
+            className="max-sm:bg-background max-sm:text-foreground max-sm:border-border"
+            disabled={upload.isPending}
+            onClick={() => fileRef.current?.click()}
+          >
             <ImageUpIcon /> Choose image
           </Button>
           <Button
             size="lg"
             variant="outline"
+            className="max-sm:bg-primary max-sm:text-primary-foreground order-first max-sm:border-transparent sm:order-none"
             disabled={upload.isPending}
-            onClick={() => cameraRef.current?.click()}
+            onClick={openCamera}
           >
             <CameraIcon /> Open camera
           </Button>
         </div>
       </div>
+      {webcam && (
+        <Webcam
+          onCapture={(file) => {
+            setWebcam(false);
+            upload.mutate({ file });
+          }}
+          onClose={closeWebcam}
+          onUnavailable={webcamUnavailable}
+        />
+      )}
       {[fileRef, cameraRef].map((ref, i) => (
         <input
           key={i}

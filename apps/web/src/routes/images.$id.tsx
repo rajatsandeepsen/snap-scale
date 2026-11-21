@@ -161,7 +161,7 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
               <span className="text-base font-normal text-neutral-500">
                 Dimension of {analysis.main.name} is
               </span>
-              <span className="text-3xl font-bold tabular-nums">
+              <span className="text-2xl font-bold tabular-nums sm:text-3xl">
                 {formatLength(analysis.main.lengthMm, unit)} ×{" "}
                 {formatLength(analysis.main.widthMm, unit)}
               </span>
