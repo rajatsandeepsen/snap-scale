@@ -1,13 +1,29 @@
 import { ORPCError } from "@orpc/server";
+import type { Analysis } from "@snap-scale/db/schema/images";
 import { images, referenceObjects } from "@snap-scale/db/schema/index";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { publicProcedure } from "../index";
-import { analyzeImage, MeasureError } from "../measure/analyze";
+import {
+  type Identification,
+  identifyObjects,
+  MeasureError,
+  MODEL,
+} from "../measure/analyze";
+import { measureOnPlane, orderClockwise } from "../measure/geometry";
+import { drawMarkers, IMAGE_MODEL } from "../measure/markers";
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// Each measure run writes its own copy so overlapping runs cannot mix.
+export const markedKey = (id: string, version: number) =>
+  `marked/${id}/${version}.png`;
+
+type PendingMarkers = Identification & { durationMs: number };
+
+const point = z.tuple([z.number(), z.number()]);
 
 export const imagesRouter = {
   upload: publicProcedure
@@ -68,6 +84,7 @@ export const imagesRouter = {
       return row;
     }),
 
+  /** gpt-5 names the objects, gpt-image draws marker dots; the browser then finds the dots. */
   measure: publicProcedure
     .input(z.object({ id: z.string() }))
     .handler(async ({ input, context }) => {
@@ -78,11 +95,13 @@ export const imagesRouter = {
       if (!row) throw new ORPCError("NOT_FOUND");
       const object = await context.images.get(row.key);
       if (!object) throw new ORPCError("NOT_FOUND");
+      const bytes = new Uint8Array(await object.arrayBuffer());
 
-      let analysis;
+      const started = Date.now();
+      let identification: Identification;
       try {
-        analysis = await analyzeImage({
-          bytes: new Uint8Array(await object.arrayBuffer()),
+        identification = await identifyObjects({
+          bytes,
           contentType: row.contentType,
           catalog: await context.db.select().from(referenceObjects),
           apiKey: context.openaiApiKey,
@@ -95,12 +114,71 @@ export const imagesRouter = {
         }
         throw error;
       }
+      const marked = await drawMarkers({
+        bytes,
+        contentType: row.contentType,
+        apiKey: context.openaiApiKey,
+        referenceName: identification.reference.name,
+        mainName: identification.main.name,
+      });
+      const pending: PendingMarkers = {
+        ...identification,
+        durationMs: Date.now() - started,
+      };
+      const version = Date.now();
+      await context.images.put(markedKey(row.id, version), marked, {
+        httpMetadata: { contentType: "image/png" },
+        customMetadata: { pending: JSON.stringify(pending) },
+      });
+      return { ...pending, version };
+    }),
+
+  /** Saves the dot positions the browser found; the size is computed here. */
+  saveMarkers: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        version: z.number().int(),
+        width: z.number().positive(),
+        height: z.number().positive(),
+        reference: z.array(point).length(4),
+        main: z.array(point).length(4),
+      }),
+    )
+    .handler(async ({ input, context }) => {
+      const key = markedKey(input.id, input.version);
+      const head = await context.images.head(key);
+      const raw = head?.customMetadata?.pending;
+      if (!raw) throw new ORPCError("NOT_FOUND");
+      const pending = JSON.parse(raw) as PendingMarkers;
+
+      const referenceCorners = orderClockwise(input.reference);
+      const mainCorners = orderClockwise(input.main);
+      const analysis: Analysis = {
+        imageWidth: input.width,
+        imageHeight: input.height,
+        main: {
+          name: pending.main.name,
+          corners: mainCorners,
+          ...measureOnPlane(
+            referenceCorners,
+            [pending.reference.widthMm, pending.reference.heightMm],
+            mainCorners,
+          ),
+        },
+        reference: { ...pending.reference, corners: referenceCorners },
+        notes: pending.notes,
+        model: `${MODEL} + ${IMAGE_MODEL}`,
+        durationMs: pending.durationMs,
+        markedVersion: input.version,
+      };
       const [updated] = await context.db
         .update(images)
         .set({ analysis })
         .where(eq(images.id, input.id))
         .returning();
-      return updated!;
+      if (!updated) throw new ORPCError("NOT_FOUND");
+      return updated;
     }),
 
   delete: publicProcedure
@@ -111,7 +189,11 @@ export const imagesRouter = {
         .from(images)
         .where(eq(images.id, input.id));
       if (!row) throw new ORPCError("NOT_FOUND");
-      await context.images.delete(row.key);
+      const marked = await context.images.list({ prefix: `marked/${row.id}/` });
+      await context.images.delete([
+        row.key,
+        ...marked.objects.map((o) => o.key),
+      ]);
       await context.db.delete(images).where(eq(images.id, input.id));
       return { id: input.id };
     }),
