@@ -111,7 +111,12 @@ app.get("/images/:id", async (c) => {
     where: { id: c.req.param("id") },
   });
   if (!row) return c.notFound();
-  const object = await ENV.IMAGES.get(row.key, { onlyIf: c.req.raw.headers });
+  const onlyIf = new Headers();
+  for (const name of ["if-none-match", "if-modified-since"]) {
+    const value = c.req.header(name);
+    if (value) onlyIf.set(name, value);
+  }
+  const object = await ENV.IMAGES.get(row.key, { onlyIf });
   if (!object) return c.notFound();
   const headers = new Headers();
   object.writeHttpMetadata(headers);
