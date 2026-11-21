@@ -20,6 +20,7 @@ export function findMarkers({ data, width, height }: ImageData) {
   }
 
   const blobs: { kind: number; size: number; x: number; y: number }[] = [];
+  const maxDot = n * 0.005;
   const stack = new Int32Array(n);
   for (let start = 0; start < n; start++) {
     const k = kind[start]!;
@@ -28,6 +29,10 @@ export function findMarkers({ data, width, height }: ImageData) {
     let size = 0;
     let sx = 0;
     let sy = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
     stack[top++] = start;
     kind[start] = 0;
     while (top > 0) {
@@ -37,6 +42,10 @@ export function findMarkers({ data, width, height }: ImageData) {
       size++;
       sx += x;
       sy += y;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
       for (const j of [
         x > 0 ? i - 1 : -1,
         x < width - 1 ? i + 1 : -1,
@@ -49,7 +58,12 @@ export function findMarkers({ data, width, height }: ImageData) {
         }
       }
     }
-    blobs.push({ kind: k, size, x: sx / size, y: sy / size });
+    // Keep only dot-like blobs (roughly round, small), not coloured regions of the photo.
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    const dotLike =
+      size <= maxDot && w <= 2 * h && h <= 2 * w && size >= 0.5 * w * h;
+    if (dotLike) blobs.push({ kind: k, size, x: sx / size, y: sy / size });
   }
 
   const pick = (k: number): Point[] | null => {
