@@ -89,9 +89,11 @@
         "@orpc/server": "catalog:",
         "@orpc/zod": "catalog:",
         "@snap-scale/db": "workspace:*",
+        "drizzle-orm": "1.0.0-rc.5",
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
         "@snap-scale/config": "workspace:*",
         "typescript": "catalog:",
       },

@@ -7,10 +7,10 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { appRouter } from "@snap-scale/api/routers/index";
 import {
+  convertToModelMessages,
   createUIMessageStreamResponse,
   streamText,
   toUIMessageStream,
-  convertToModelMessages,
   wrapLanguageModel,
 } from "ai";
 import { Hono } from "hono";
@@ -19,6 +19,7 @@ import { logger } from "hono/logger";
 
 import { createContext } from "./context";
 import { ENV } from "./env.server";
+import { getDb } from "./services";
 
 const app = new Hono();
 
@@ -94,6 +95,20 @@ app.post("/ai", async (c) => {
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({ stream: result.stream }),
   });
+});
+
+app.get("/images/:id", async (c) => {
+  const row = await getDb().query.images.findFirst({
+    where: { id: c.req.param("id") },
+  });
+  if (!row) return c.notFound();
+  const object = await ENV.IMAGES.get(row.key);
+  if (!object) return c.notFound();
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+  return new Response(object.body, { headers });
 });
 
 app.get("/", (c) => {

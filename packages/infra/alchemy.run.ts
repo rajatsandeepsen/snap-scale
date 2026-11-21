@@ -8,6 +8,8 @@ export const db = Cloudflare.D1.Database("database", {
   migrations: "../../packages/db/src/migrations",
 });
 
+export const images = Cloudflare.R2.Bucket("images");
+
 export const server = Cloudflare.Worker("server", {
   main: "../../apps/server/src/index.ts",
   compatibility: {
@@ -15,6 +17,7 @@ export const server = Cloudflare.Worker("server", {
   },
   env: {
     DB: db,
+    IMAGES: images,
     CORS_ORIGIN: Config.String("CORS_ORIGIN"),
     GOOGLE_GENERATIVE_AI_API_KEY: Config.Redacted("GOOGLE_GENERATIVE_AI_API_KEY"),
   },
