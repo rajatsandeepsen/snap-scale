@@ -1,6 +1,6 @@
 import type { AppRouterClient } from "@snap-scale/api/routers/index";
 
-import { formatMm } from "@/utils/image-url";
+import { formatLength, useUnit } from "@/utils/units";
 
 type Analysis = NonNullable<
   Awaited<ReturnType<AppRouterClient["images"]["get"]>>["analysis"]
@@ -66,6 +66,7 @@ function Shape({
 export function MeasurementOverlay({ analysis }: { analysis: Analysis }) {
   const { imageWidth: w, imageHeight: h, main, reference } = analysis;
   const unit = Math.max(w, h) / 120;
+  const lengthUnit = useUnit();
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
@@ -82,7 +83,7 @@ export function MeasurementOverlay({ analysis }: { analysis: Analysis }) {
       <Shape
         corners={main.corners}
         color="#f97316"
-        label={`${formatMm(main.lengthMm)} × ${formatMm(main.widthMm)}`}
+        label={`${formatLength(main.lengthMm, lengthUnit)} × ${formatLength(main.widthMm, lengthUnit)}`}
         unit={unit}
       />
     </svg>

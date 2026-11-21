@@ -6,7 +6,8 @@ import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
-import { formatMm, imageUrl } from "@/utils/image-url";
+import { imageUrl } from "@/utils/image-url";
+import { formatLength, useUnit } from "@/utils/units";
 import { orpc } from "@/utils/orpc";
 
 import type { Route } from "./+types/_index";
@@ -28,6 +29,7 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
 
   const images = useQuery(orpc.images.list.queryOptions());
+  const unit = useUnit();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
 
@@ -121,7 +123,7 @@ export default function Home() {
                 <CardContent className="flex items-center justify-between gap-2 px-3 pb-3">
                   <span className="truncate text-xs" title={image.filename}>
                     {image.analysis
-                      ? `${image.analysis.main.name}: ${formatMm(image.analysis.main.lengthMm)} × ${formatMm(image.analysis.main.widthMm)}`
+                      ? `${image.analysis.main.name}: ${formatLength(image.analysis.main.lengthMm, unit)} × ${formatLength(image.analysis.main.widthMm, unit)}`
                       : image.filename}
                   </span>
                   <Button

@@ -5,6 +5,3 @@ export const imageUrl = (id: string) =>
 
 export const markedUrl = (id: string, version: number) =>
   `${imageUrl(id)}/marked/${version}`;
-
-export const formatMm = (mm: number) =>
-  mm < 100 ? `${mm.toFixed(1)} mm` : `${(mm / 10).toFixed(1)} cm`;

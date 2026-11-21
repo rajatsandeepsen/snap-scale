@@ -7,8 +7,10 @@ import { Link } from "react-router";
 
 import { MeasurementOverlay } from "@/components/measurement-overlay";
 import { findMarkers, loadImageData } from "@/utils/find-markers";
-import { formatMm, imageUrl, markedUrl } from "@/utils/image-url";
+import { UnitPicker } from "@/components/unit-picker";
+import { imageUrl, markedUrl } from "@/utils/image-url";
 import { client, orpc } from "@/utils/orpc";
+import { formatLength, useUnit } from "@/utils/units";
 
 import type { Route } from "./+types/images.$id";
 
@@ -58,6 +60,7 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
   }, [image.data, measure, params.id]);
 
   const analysis = image.data?.analysis;
+  const unit = useUnit();
 
   return (
     <div className="container mx-auto grid max-w-3xl gap-4 px-4 py-6">
@@ -106,14 +109,18 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
           {analysis && !measure.isPending && (
             <Card>
               <CardContent className="grid gap-2 text-sm">
-                <div className="text-lg font-semibold">
-                  {analysis.main.name}: {formatMm(analysis.main.lengthMm)} ×{" "}
-                  {formatMm(analysis.main.widthMm)}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-lg font-semibold">
+                    {analysis.main.name}:{" "}
+                    {formatLength(analysis.main.lengthMm, unit)} ×{" "}
+                    {formatLength(analysis.main.widthMm, unit)}
+                  </div>
+                  <UnitPicker />
                 </div>
                 <div className="text-muted-foreground">
                   Reference: {analysis.reference.name} (
-                  {analysis.reference.widthMm} × {analysis.reference.heightMm}{" "}
-                  mm,{" "}
+                  {formatLength(analysis.reference.widthMm, unit)} ×{" "}
+                  {formatLength(analysis.reference.heightMm, unit)},{" "}
                   {analysis.reference.source === "catalog"
                     ? "from catalog"
                     : "from web search"}
