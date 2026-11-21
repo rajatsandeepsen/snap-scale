@@ -3,9 +3,9 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { MAX_IMAGE_BYTES } from "@snap-scale/api/routers/images";
+import { MAX_IMAGE_BYTES, markedKey } from "@snap-scale/api/routers/images";
 import { appRouter } from "@snap-scale/api/routers/index";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -77,17 +77,13 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
-app.get("/images/:id", async (c) => {
-  const row = await getDb().query.images.findFirst({
-    where: { id: c.req.param("id") },
-  });
-  if (!row) return c.notFound();
+const serveImage = async (c: Context, key: string) => {
   const onlyIf = new Headers();
   for (const name of ["if-none-match", "if-modified-since"]) {
     const value = c.req.header(name);
     if (value) onlyIf.set(name, value);
   }
-  const object = await ENV.IMAGES.get(row.key, { onlyIf });
+  const object = await ENV.IMAGES.get(key, { onlyIf });
   if (!object) return c.notFound();
   const headers = new Headers();
   object.writeHttpMetadata(headers);
@@ -95,7 +91,19 @@ app.get("/images/:id", async (c) => {
   headers.set("cache-control", "private, no-cache");
   if (!("body" in object)) return new Response(null, { status: 304, headers });
   return new Response(object.body, { headers });
+};
+
+app.get("/images/:id", async (c) => {
+  const row = await getDb().query.images.findFirst({
+    where: { id: c.req.param("id") },
+  });
+  if (!row) return c.notFound();
+  return serveImage(c, row.key);
 });
+
+app.get("/images/:id/marked", (c) =>
+  serveImage(c, markedKey(c.req.param("id"))),
+);
 
 app.get("/", (c) => {
   return c.text("OK");

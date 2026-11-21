@@ -2,12 +2,13 @@ import { Button } from "@snap-scale/ui/components/button";
 import { Card, CardContent } from "@snap-scale/ui/components/card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftIcon, Loader2, RulerIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { MeasurementOverlay } from "@/components/measurement-overlay";
-import { formatMm, imageUrl } from "@/utils/image-url";
-import { orpc } from "@/utils/orpc";
+import { findMarkers, loadImageData } from "@/utils/find-markers";
+import { formatMm, imageUrl, markedUrl } from "@/utils/image-url";
+import { client, orpc } from "@/utils/orpc";
 
 import type { Route } from "./+types/images.$id";
 
@@ -21,14 +22,31 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
     input: { id: params.id },
   });
   const image = useQuery(queryOptions);
-  const measure = useMutation(
-    orpc.images.measure.mutationOptions({
-      onSuccess: (row) => {
-        queryClient.setQueryData(queryOptions.queryKey, row);
-        queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
-      },
-    }),
-  );
+  const measure = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      setStage("marking");
+      const { version } = await client.images.measure({ id });
+      setStage("detecting");
+      const found = findMarkers(await loadImageData(markedUrl(id, version)));
+      if (!found.reference || !found.main) {
+        throw new Error(
+          "Couldn't find all 8 marker dots in the marked image. Try Measure again.",
+        );
+      }
+      return client.images.saveMarkers({
+        id,
+        width: found.width,
+        height: found.height,
+        reference: found.reference,
+        main: found.main,
+      });
+    },
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryOptions.queryKey, row);
+      queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
+    },
+  });
+  const [stage, setStage] = useState<"marking" | "detecting">("marking");
 
   const autoStarted = useRef(false);
   useEffect(() => {
@@ -57,7 +75,11 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
         <>
           <div className="relative overflow-hidden rounded-lg border">
             <img
-              src={imageUrl(image.data.id)}
+              src={
+                analysis?.markedKey && !measure.isPending
+                  ? markedUrl(image.data.id, image.dataUpdatedAt)
+                  : imageUrl(image.data.id)
+              }
               alt={image.data.filename}
               className="block w-full"
             />
@@ -67,7 +89,9 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
             {measure.isPending && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-sm text-white">
                 <Loader2 className="size-6 animate-spin" />
-                Measuring with gpt-5. This can take a minute.
+                {stage === "marking"
+                  ? "gpt-5 is finding the objects and gpt-image-2 is marking their corners. This takes 1–2 minutes."
+                  : "Finding the marker dots…"}
               </div>
             )}
           </div>
