@@ -49,7 +49,9 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
         <ArrowLeftIcon className="size-4" /> All uploads
       </Link>
 
-      {image.isLoading || !image.data ? (
+      {image.isError ? (
+        <p className="text-destructive text-sm">{image.error.message}</p>
+      ) : image.isLoading || !image.data ? (
         <Loader2 className="size-5 animate-spin" />
       ) : (
         <>
