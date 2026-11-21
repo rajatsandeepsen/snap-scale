@@ -19,7 +19,6 @@ export const server = Cloudflare.Worker("server", {
     DB: db,
     IMAGES: images,
     CORS_ORIGIN: Config.String("CORS_ORIGIN").pipe(Config.withDefault("*")),
-    OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY"),
   },
   dev: {
     port: 3000,

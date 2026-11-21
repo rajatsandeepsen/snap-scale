@@ -10,7 +10,6 @@
     "env:generate": "varlock codegen"
   },
   "dependencies": {
-    "@ai-sdk/react": "^4.0.174",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "^1.16.2",
@@ -20,7 +19,6 @@
     "@snap-scale/api": "workspace:*",
     "@snap-scale/ui": "workspace:*",
     "@tanstack/react-query": "^5.107.1",
-    "ai": "catalog:",
     "isbot": "^5.2.3",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
@@ -28,7 +26,6 @@
     "react-dom": "catalog:",
     "react-router": "^8.5.1",
     "sonner": "catalog:",
-    "streamdown": "^2.7.1",
     "varlock": "catalog:",
     "zod": "catalog:"
   },

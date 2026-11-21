@@ -1,5 +1,3 @@
-import { devToolsMiddleware } from "@ai-sdk/devtools";
-import { createOpenAI } from "@ai-sdk/openai";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
@@ -7,13 +5,6 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { MAX_IMAGE_BYTES } from "@snap-scale/api/routers/images";
 import { appRouter } from "@snap-scale/api/routers/index";
-import {
-  convertToModelMessages,
-  createUIMessageStreamResponse,
-  streamText,
-  toUIMessageStream,
-  wrapLanguageModel,
-} from "ai";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
@@ -84,26 +75,6 @@ app.use("/*", async (c, next) => {
   }
 
   await next();
-});
-
-app.post("/ai", async (c) => {
-  const body = await c.req.json();
-  const uiMessages = body.messages || [];
-  const openai = createOpenAI({
-    apiKey: ENV.OPENAI_API_KEY,
-  });
-  const model = wrapLanguageModel({
-    model: openai("gpt-5.4-mini"),
-    middleware: devToolsMiddleware(),
-  });
-  const result = streamText({
-    model,
-    messages: await convertToModelMessages(uiMessages),
-  });
-
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
-  });
 });
 
 app.get("/images/:id", async (c) => {
