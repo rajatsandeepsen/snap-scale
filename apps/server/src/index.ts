@@ -1,5 +1,5 @@
 import { devToolsMiddleware } from "@ai-sdk/devtools";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
@@ -29,7 +29,7 @@ app.use(logger());
 app.use(
   "/*",
   cors({
-    origin: ENV.CORS_ORIGIN,
+    origin: ENV.CORS_ORIGIN || "*",
     allowMethods: ["GET", "POST", "OPTIONS"],
   }),
 );
@@ -89,11 +89,11 @@ app.use("/*", async (c, next) => {
 app.post("/ai", async (c) => {
   const body = await c.req.json();
   const uiMessages = body.messages || [];
-  const google = createGoogleGenerativeAI({
-    apiKey: ENV.GOOGLE_GENERATIVE_AI_API_KEY,
+  const openai = createOpenAI({
+    apiKey: ENV.OPENAI_API_KEY,
   });
   const model = wrapLanguageModel({
-    model: google("gemini-2.5-flash"),
+    model: openai("gpt-5.4-mini"),
     middleware: devToolsMiddleware(),
   });
   const result = streamText({
