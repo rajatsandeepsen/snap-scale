@@ -173,9 +173,13 @@ export async function analyzeImage(options: {
     ?.find((item) => item.type === "message")
     ?.content?.find((c) => c.type === "output_text")?.text;
   if (!text) throw new Error("OpenAI returned no output");
-  const out = modelOutput.parse(JSON.parse(text));
-  if (!out.found)
-    throw new MeasureError(out.notes || "No reference object found");
+  const json = JSON.parse(text);
+  const verdict = z
+    .object({ found: z.boolean(), notes: z.string() })
+    .parse(json);
+  if (!verdict.found)
+    throw new MeasureError(verdict.notes || "No reference object found");
+  const out = modelOutput.parse(json);
 
   const toPx = (points: { x: number; y: number }[]) =>
     orderClockwise(
