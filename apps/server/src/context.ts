@@ -1,6 +1,7 @@
 import type { Context as ApiContext } from "@snap-scale/api/context";
 import type { Context as HonoContext } from "hono";
 
+import { ENV } from "./env.server";
 import { getDb } from "./services";
 
 export type CreateContextOptions = {
@@ -11,6 +12,7 @@ export async function createContext(_options: CreateContextOptions): Promise<Api
   const db = await getDb();
   return {
     db,
+    images: ENV.IMAGES,
   };
 }
 
