@@ -55,10 +55,7 @@ const modelOutput = z.object({
 
 export type Identification = {
   main: { name: string };
-  reference: Pick<
-    Analysis["reference"],
-    "name" | "source" | "widthMm" | "heightMm"
-  >;
+  reference: Pick<Analysis["reference"], "name" | "source" | "widthMm" | "heightMm">;
   notes: string;
 };
 
@@ -77,23 +74,16 @@ type ResponsesOutput = {
   error?: { message: string } | null;
 };
 
-export async function identifyObjects(options: {
+/** Sends one image to gpt-5 and returns its JSON reply, validated against `schema` by OpenAI. */
+export async function askJson(options: {
+  apiKey: string;
+  instructions: string;
   bytes: Uint8Array;
   contentType: string;
-  catalog: ReferenceObject[];
-  apiKey: string;
-}): Promise<Identification> {
-  const catalog = options.catalog.map(
-    ({ id, name, aliases, shape, widthMm, heightMm }) => ({
-      id,
-      name,
-      aliases,
-      shape,
-      width_mm: widthMm,
-      height_mm: heightMm,
-    }),
-  );
-
+  name: string;
+  schema: object;
+  webSearch?: boolean;
+}): Promise<unknown> {
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -103,8 +93,8 @@ export async function identifyObjects(options: {
     body: JSON.stringify({
       model: MODEL,
       reasoning: { effort: "low" },
-      instructions: `${INSTRUCTIONS}\n\nReference catalog:\n${JSON.stringify(catalog)}`,
-      tools: [{ type: "web_search" }],
+      instructions: options.instructions,
+      ...(options.webSearch ? { tools: [{ type: "web_search" }] } : {}),
       input: [
         {
           role: "user",
@@ -120,29 +110,49 @@ export async function identifyObjects(options: {
       text: {
         format: {
           type: "json_schema",
-          name: "measurement",
+          name: options.name,
           strict: true,
-          schema: SCHEMA,
+          schema: options.schema,
         },
       },
     }),
   });
   const body = (await res.json()) as ResponsesOutput;
-  if (!res.ok)
-    throw new Error(
-      `OpenAI error ${res.status}: ${body.error?.message ?? "unknown"}`,
-    );
+  if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${body.error?.message ?? "unknown"}`);
 
   const text = body.output
     ?.find((item) => item.type === "message")
     ?.content?.find((c) => c.type === "output_text")?.text;
   if (!text) throw new Error("OpenAI returned no output");
-  const json = JSON.parse(text);
-  const verdict = z
-    .object({ found: z.boolean(), notes: z.string() })
-    .parse(json);
-  if (!verdict.found)
-    throw new MeasureError(verdict.notes || "No reference object found");
+  return JSON.parse(text);
+}
+
+export async function identifyObjects(options: {
+  bytes: Uint8Array;
+  contentType: string;
+  catalog: ReferenceObject[];
+  apiKey: string;
+}): Promise<Identification> {
+  const catalog = options.catalog.map(({ id, name, aliases, shape, widthMm, heightMm }) => ({
+    id,
+    name,
+    aliases,
+    shape,
+    width_mm: widthMm,
+    height_mm: heightMm,
+  }));
+
+  const json = await askJson({
+    apiKey: options.apiKey,
+    instructions: `${INSTRUCTIONS}\n\nReference catalog:\n${JSON.stringify(catalog)}`,
+    bytes: options.bytes,
+    contentType: options.contentType,
+    name: "measurement",
+    schema: SCHEMA,
+    webSearch: true,
+  });
+  const verdict = z.object({ found: z.boolean(), notes: z.string() }).parse(json);
+  if (!verdict.found) throw new MeasureError(verdict.notes || "No reference object found");
   const out = modelOutput.parse(json);
   return {
     main: { name: out.main.name },
