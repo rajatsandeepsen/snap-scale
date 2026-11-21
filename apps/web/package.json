@@ -1,0 +1,47 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b ../../packages/api && react-router build",
+    "start": "react-router-serve ./build/server/index.js",
+    "check-types": "tsc -b ../../packages/api && react-router typegen && tsc --noEmit",
+    "dev:bare": "react-router dev",
+    "env:generate": "varlock codegen"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^4.0.174",
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/tanstack-query": "^1.16.2",
+    "@react-router/fs-routes": "^8.5.1",
+    "@react-router/node": "^8.5.1",
+    "@react-router/serve": "^8.5.1",
+    "@snap-scale/api": "workspace:*",
+    "@snap-scale/ui": "workspace:*",
+    "@tanstack/react-query": "^5.107.1",
+    "ai": "catalog:",
+    "isbot": "^5.2.3",
+    "lucide-react": "catalog:",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "^8.5.1",
+    "sonner": "catalog:",
+    "streamdown": "^2.7.1",
+    "varlock": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^8.5.1",
+    "@snap-scale/config": "workspace:*",
+    "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/react-query-devtools": "^5.107.1",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

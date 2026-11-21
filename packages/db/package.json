@@ -1,0 +1,26 @@
+{
+  "name": "@snap-scale/db",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check-types": "tsc -b",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:deploy": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@libsql/client": "0.18.0",
+    "drizzle-orm": "1.0.0-rc.5",
+    "libsql": "0.5.29",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@snap-scale/config": "workspace:*",
+    "drizzle-kit": "1.0.0-rc.5",
+    "typescript": "catalog:",
+    "varlock": "catalog:"
+  }
+}
