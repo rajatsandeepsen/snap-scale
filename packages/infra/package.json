@@ -5,7 +5,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "dev": "alchemy dev",
-    "deploy": "alchemy deploy",
+    "deploy": "alchemy deploy --stage prod --yes",
     "destroy": "alchemy destroy"
   },
   "dependencies": {

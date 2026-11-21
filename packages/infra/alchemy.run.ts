@@ -18,8 +18,7 @@ export const server = Cloudflare.Worker("server", {
   env: {
     DB: db,
     IMAGES: images,
-    CORS_ORIGIN: Config.String("CORS_ORIGIN"),
-    GOOGLE_GENERATIVE_AI_API_KEY: Config.Redacted("GOOGLE_GENERATIVE_AI_API_KEY"),
+    CORS_ORIGIN: Config.String("CORS_ORIGIN").pipe(Config.withDefault("*")),
   },
   dev: {
     port: 3000,
