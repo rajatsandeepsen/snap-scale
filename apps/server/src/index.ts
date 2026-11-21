@@ -111,12 +111,13 @@ app.get("/images/:id", async (c) => {
     where: { id: c.req.param("id") },
   });
   if (!row) return c.notFound();
-  const object = await ENV.IMAGES.get(row.key);
+  const object = await ENV.IMAGES.get(row.key, { onlyIf: c.req.raw.headers });
   if (!object) return c.notFound();
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("cache-control", "private, no-cache");
+  if (!("body" in object)) return new Response(null, { status: 304, headers });
   return new Response(object.body, { headers });
 });
 
