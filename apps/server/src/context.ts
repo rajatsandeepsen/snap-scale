@@ -8,11 +8,14 @@ export type CreateContextOptions = {
   context: HonoContext;
 };
 
-export async function createContext(_options: CreateContextOptions): Promise<ApiContext> {
+export async function createContext(
+  _options: CreateContextOptions,
+): Promise<ApiContext> {
   const db = await getDb();
   return {
     db,
     images: ENV.IMAGES,
+    openaiApiKey: ENV.OPENAI_API_KEY,
   };
 }
 
