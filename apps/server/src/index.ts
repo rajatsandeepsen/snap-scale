@@ -5,6 +5,7 @@ import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
+import { MAX_IMAGE_BYTES } from "@snap-scale/api/routers/images";
 import { appRouter } from "@snap-scale/api/routers/index";
 import {
   convertToModelMessages,
@@ -14,6 +15,7 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
@@ -29,6 +31,13 @@ app.use(
   cors({
     origin: ENV.CORS_ORIGIN,
     allowMethods: ["GET", "POST", "OPTIONS"],
+  }),
+);
+app.use(
+  "/*",
+  bodyLimit({
+    maxSize: MAX_IMAGE_BYTES + 1024 * 1024,
+    onError: (c) => c.text("Payload too large", 413),
   }),
 );
 
