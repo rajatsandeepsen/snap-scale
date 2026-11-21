@@ -7,8 +7,9 @@ const INSTRUCTIONS = `You identify objects in photos so they can be measured aga
 
 1. Identify the MAIN object: the most prominent object the photographer most likely wants measured (not the reference).
 2. Identify a REFERENCE object of globally standardized size. Prefer one from the catalog below and set catalog_id and source="catalog". If the visible reference is a standardized product that is not in the catalog, use web search to find its exact real-world dimensions in millimetres, set catalog_id=null and source="web".
-3. Give each object a short, visually distinctive name (e.g. "red credit card", "blue notebook") so an image editor can find it in the photo.
-4. width_mm and height_mm are the reference's real size.
+3. List up to 4 other prominent objects in main.alternatives that the photographer might want measured instead (never the reference).
+4. Give each object a short, visually distinctive name (e.g. "red credit card", "blue notebook") so an image editor can find it in the photo.
+5. width_mm and height_mm are the reference's real size.
 
 If there is no clear main object or no standardized reference object, set found=false and explain why in notes. Keep notes to one or two short sentences.`;
 
@@ -22,8 +23,11 @@ const SCHEMA = {
     main: {
       type: "object",
       additionalProperties: false,
-      required: ["name"],
-      properties: { name: { type: "string" } },
+      required: ["name", "alternatives"],
+      properties: {
+        name: { type: "string" },
+        alternatives: { type: "array", items: { type: "string" } },
+      },
     },
     reference: {
       type: "object",
@@ -43,7 +47,7 @@ const SCHEMA = {
 const modelOutput = z.object({
   found: z.boolean(),
   notes: z.string(),
-  main: z.object({ name: z.string() }),
+  main: z.object({ name: z.string(), alternatives: z.array(z.string()) }),
   reference: z.object({
     name: z.string(),
     catalog_id: z.string().nullable(),
@@ -54,7 +58,7 @@ const modelOutput = z.object({
 });
 
 export type Identification = {
-  main: { name: string };
+  main: { name: string; alternatives: string[] };
   reference: Pick<Analysis["reference"], "name" | "source" | "widthMm" | "heightMm">;
   notes: string;
 };
@@ -155,7 +159,7 @@ export async function identifyObjects(options: {
   if (!verdict.found) throw new MeasureError(verdict.notes || "No reference object found");
   const out = modelOutput.parse(json);
   return {
-    main: { name: out.main.name },
+    main: { name: out.main.name, alternatives: out.main.alternatives.slice(0, 4) },
     reference: {
       name: out.reference.name,
       source: out.reference.source,

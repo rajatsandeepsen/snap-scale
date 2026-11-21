@@ -1,46 +1,80 @@
+import type { AppRouterClient } from "@snap-scale/api/routers/index";
 import { orderClockwise } from "@snap-scale/api/measure/geometry";
 import { Button } from "@snap-scale/ui/components/button";
-import { Card, CardContent } from "@snap-scale/ui/components/card";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftIcon, Loader2, RulerIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRightIcon, CheckIcon, Loader2 } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
-import { MeasurementOverlay } from "@/components/measurement-overlay";
-import { SidesTable } from "@/components/sides-table";
+import { NextActions } from "@/components/next-actions";
+import { ResultImage } from "@/components/result-image";
+import { StepCard, StepStage } from "@/components/step-stage";
 import { UnitPicker } from "@/components/unit-picker";
 import { annotateCorners } from "@/utils/annotate";
 import { findMarkers, loadImageData } from "@/utils/find-markers";
-import { imageUrl, markedUrl } from "@/utils/image-url";
+import { markedUrl } from "@/utils/image-url";
 import { client, orpc } from "@/utils/orpc";
 import { formatLength, useUnit } from "@/utils/units";
 
 import type { Route } from "./+types/images.$id";
 
+type Identification = Awaited<ReturnType<AppRouterClient["images"]["identify"]>>;
+type Step =
+  | { kind: "loading" }
+  | { kind: "identifying" }
+  | { kind: "main"; ident: Identification }
+  | { kind: "reference"; ident: Identification }
+  | { kind: "marking" }
+  | { kind: "calculating" }
+  | { kind: "result" }
+  | { kind: "actions" }
+  | { kind: "error"; message: string };
+
+const CHOICE_SECONDS = 5;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export function meta() {
-  return [{ title: "Measurement · snap-scale" }];
+  return [{ title: "Measuring · snap-scale" }];
 }
 
 export default function ImageDetail({ params }: Route.ComponentProps) {
+  const id = params.id;
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const queryOptions = orpc.images.get.queryOptions({
-    input: { id: params.id },
-  });
+  const queryOptions = orpc.images.get.queryOptions({ input: { id } });
   const image = useQuery(queryOptions);
-  const measure = useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      setStage("marking");
-      const { version } = await client.images.measure({ id });
-      setStage("detecting");
+  const unit = useUnit();
+  const [step, setStep] = useState<Step>({ kind: "loading" });
+  const choose = useRef<(name: string) => void>(() => {});
+  const runId = useRef(0);
+
+  const run = useCallback(async () => {
+    const me = ++runId.current;
+    const live = () => runId.current === me;
+    const go = (s: Step) => live() && setStep(s);
+    try {
+      go({ kind: "identifying" });
+      const ident = await client.images.identify({ id });
+      const name = await new Promise<string>((resolve) => {
+        choose.current = resolve;
+        go({ kind: "main", ident });
+      });
+      if (!live()) return;
+      const chosen = { ...ident, main: { ...ident.main, name } };
+      go({ kind: "reference", ident: chosen });
+      const marking = client.images.mark({ id, identification: chosen });
+      await Promise.race([sleep(3000), marking]);
+      go({ kind: "marking" });
+      const { version } = await marking;
+      go({ kind: "calculating" });
       const marked = await loadImageData(markedUrl(id, version));
       const found = findMarkers(marked);
       if (!found.reference || !found.main) {
-        throw new Error("Couldn't find all 8 marker dots in the marked image. Try Measure again.");
+        throw new Error("The marker dots didn't come out clearly.");
       }
       const reference = orderClockwise(found.reference);
       const main = orderClockwise(found.main);
-      setStage("rating");
-      return client.images.saveMarkers({
+      const row = await client.images.saveMarkers({
         id,
         version,
         width: found.width,
@@ -49,138 +83,218 @@ export default function ImageDetail({ params }: Route.ComponentProps) {
         main,
         annotated: await annotateCorners(marked, reference, main),
       });
-    },
-    onSuccess: (row) => {
+      if (!live()) return;
       queryClient.setQueryData(queryOptions.queryKey, row);
-      queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
-    },
-  });
-  const [stage, setStage] = useState<"marking" | "detecting" | "rating">("marking");
-
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (image.data && !image.data.analysis && !autoStarted.current) {
-      autoStarted.current = true;
-      measure.mutate({ id: params.id });
+      go({ kind: "result" });
+    } catch (error) {
+      go({ kind: "error", message: error instanceof Error ? error.message : String(error) });
     }
-  }, [image.data, measure, params.id]);
+  }, [id, queryClient, queryOptions.queryKey]);
+
+  useEffect(() => {
+    if (step.kind !== "loading" || !image.data) return;
+    if (image.data.analysis) setStep({ kind: "result" });
+    else run();
+  }, [image.data, step.kind, run]);
+  useEffect(() => () => void runId.current++, []);
 
   const analysis = image.data?.analysis;
-  const unit = useUnit();
+  let card: ReactNode;
+  switch (step.kind) {
+    case "loading":
+      card = image.isError ? (
+        <StepCard title="Image not found">
+          <Button onClick={() => navigate("/")}>New photo</Button>
+        </StepCard>
+      ) : (
+        <Spinner />
+      );
+      break;
+    case "identifying":
+      card = (
+        <StepCard step={1} title="Looking at your photo">
+          <Working>Finding the main object…</Working>
+        </StepCard>
+      );
+      break;
+    case "main":
+      card = <MainChoice ident={step.ident} onDone={(name) => choose.current(name)} />;
+      break;
+    case "reference":
+      card = (
+        <StepCard step={2} title="Reference object detected">
+          <div className="grid gap-1">
+            <p className="text-2xl font-semibold">{step.ident.reference.name}</p>
+            <p className="flex items-center gap-1.5 text-sm text-neutral-500">
+              <CheckIcon className="size-4 text-green-600" />
+              {step.ident.reference.source === "web"
+                ? "Searched the internet for its dimensions"
+                : "Found in the standard sizes catalog"}
+              : {formatLength(step.ident.reference.widthMm, unit)} ×{" "}
+              {formatLength(step.ident.reference.heightMm, unit)}
+            </p>
+          </div>
+        </StepCard>
+      );
+      break;
+    case "marking":
+      card = (
+        <StepCard step={3} title="Adding points to the image">
+          <Working timer>Marking the corners of both objects</Working>
+        </StepCard>
+      );
+      break;
+    case "calculating":
+      card = (
+        <StepCard step={4} title="Calculating pixels">
+          <Working timer>Measuring every side against the reference</Working>
+        </StepCard>
+      );
+      break;
+    case "result":
+      card = analysis && (
+        <StepCard
+          step={5}
+          wide
+          title={
+            <span className="grid gap-1 text-center">
+              <span className="text-base font-normal text-neutral-500">
+                Dimension of {analysis.main.name} is
+              </span>
+              <span className="text-3xl font-bold tabular-nums">
+                {formatLength(analysis.main.lengthMm, unit)} ×{" "}
+                {formatLength(analysis.main.widthMm, unit)}
+              </span>
+            </span>
+          }
+        >
+          <UnitPicker size="sm" />
+          <ResultImage id={id} analysis={analysis} unit={unit} />
+          <Button
+            size="lg"
+            className="justify-self-center"
+            onClick={() => setStep({ kind: "actions" })}
+          >
+            Next <ArrowRightIcon />
+          </Button>
+        </StepCard>
+      );
+      break;
+    case "actions":
+      card = analysis && (
+        <StepCard title={`What next with ${analysis.main.name}?`}>
+          <UnitPicker size="sm" />
+          <NextActions
+            name={analysis.main.name}
+            lengthMm={analysis.main.lengthMm}
+            widthMm={analysis.main.widthMm}
+            unit={unit}
+            onBack={() => setStep({ kind: "result" })}
+            onRemeasure={run}
+          />
+        </StepCard>
+      );
+      break;
+    case "error":
+      card = (
+        <StepCard title="Couldn't measure this photo">
+          <p className="text-sm text-neutral-500">{step.message}</p>
+          <div className="flex gap-2">
+            <Button onClick={run}>Try again</Button>
+            <Button variant="outline" onClick={() => navigate("/")}>
+              New photo
+            </Button>
+          </div>
+        </StepCard>
+      );
+      break;
+  }
 
   return (
-    <div className="container mx-auto grid max-w-3xl gap-4 px-4 py-6">
-      <Link
-        to="/"
-        className="text-muted-foreground flex items-center gap-1 text-sm hover:underline"
-      >
-        <ArrowLeftIcon className="size-4" /> All uploads
-      </Link>
-
-      {image.isError ? (
-        <p className="text-destructive text-sm">{image.error.message}</p>
-      ) : image.isLoading || !image.data ? (
-        <Loader2 className="size-5 animate-spin" />
-      ) : (
-        <>
-          <div className="relative overflow-hidden rounded-lg border">
-            <img
-              src={
-                analysis?.markedVersion && !measure.isPending
-                  ? markedUrl(image.data.id, analysis.markedVersion)
-                  : imageUrl(image.data.id)
-              }
-              alt={image.data.filename}
-              className="block w-full"
-            />
-            {analysis && !measure.isPending && <MeasurementOverlay analysis={analysis} />}
-            {measure.isPending && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-sm text-white">
-                <Loader2 className="size-6 animate-spin" />
-                {stage === "marking"
-                  ? "gpt-5 is finding the objects and gpt-image-2 is marking their corners. This takes 1–2 minutes."
-                  : stage === "detecting"
-                    ? "Finding the marker dots…"
-                    : "gpt-5 is rating how clear each numbered side is…"}
-              </div>
-            )}
-          </div>
-
-          {measure.isError && (
-            <p className="text-destructive text-sm">Measurement failed: {measure.error.message}</p>
-          )}
-
-          {analysis && !measure.isPending && (
-            <Card>
-              <CardContent className="grid gap-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-lg font-semibold">
-                    {analysis.main.name}: {formatLength(analysis.main.lengthMm, unit)} ×{" "}
-                    {formatLength(analysis.main.widthMm, unit)}
-                  </div>
-                  <UnitPicker />
-                </div>
-                <div className="text-muted-foreground">
-                  Reference: {analysis.reference.name} (
-                  {formatLength(analysis.reference.widthMm, unit)} ×{" "}
-                  {formatLength(analysis.reference.heightMm, unit)},{" "}
-                  {analysis.reference.source === "catalog" ? "from catalog" : "from web search"})
-                </div>
-                {analysis.main.edges && analysis.reference.edges && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <SidesTable
-                      title={`${analysis.main.name} (measured)`}
-                      prefix="M"
-                      edges={analysis.main.edges}
-                      unit={unit}
-                      markUsed
-                    />
-                    <SidesTable
-                      title={`${analysis.reference.name} (known size)`}
-                      prefix="R"
-                      edges={analysis.reference.edges}
-                      unit={unit}
-                    />
-                  </div>
-                )}
-                {analysis.main.edges && (
-                  <p className="text-muted-foreground text-xs">
-                    Bold sides set the result: of each pair of opposite sides, the one gpt-5 rated
-                    clearer is used. Hover a side for its reason.
-                  </p>
-                )}
-                {analysis.reference.rebuiltCorner && (
-                  <p className="text-muted-foreground">
-                    Reference corner R{analysis.reference.rebuiltCorner} looked hidden, so it was
-                    rebuilt from the other three.
-                  </p>
-                )}
-                {analysis.reference.edges?.some((e) => e.priority <= 2) &&
-                  !analysis.reference.rebuiltCorner && (
-                    <p className="text-amber-600 dark:text-amber-400">
-                      Some reference sides look unreliable, so this result may be off. Try a
-                      flatter, top-down photo.
-                    </p>
-                  )}
-                {analysis.notes && <p className="text-muted-foreground">{analysis.notes}</p>}
-                <div className="text-muted-foreground text-xs">
-                  {analysis.model} · {(analysis.durationMs / 1000).toFixed(0)} s · 2D estimate on
-                  the reference's surface
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Button
-            variant="outline"
-            className="justify-self-start"
-            disabled={measure.isPending}
-            onClick={() => measure.mutate({ id: params.id })}
-          >
-            <RulerIcon /> {analysis ? "Measure again" : "Measure"}
-          </Button>
-        </>
-      )}
+    <div className="grid min-h-svh place-items-center p-4">
+      <StepStage id={step.kind}>{card}</StepStage>
     </div>
+  );
+}
+
+function Spinner() {
+  return <Loader2 className="mx-auto size-6 animate-spin text-neutral-400" />;
+}
+
+function Working({ children, timer = false }: { children: ReactNode; timer?: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!timer) return;
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [timer]);
+  return (
+    <p className="flex items-center gap-2 text-sm text-neutral-500">
+      <Loader2 className="size-4 animate-spin" />
+      {children}
+      {timer && <span className="ml-auto tabular-nums">{seconds} s</span>}
+    </p>
+  );
+}
+
+function MainChoice({ ident, onDone }: { ident: Identification; onDone: (name: string) => void }) {
+  const options = [...new Set([ident.main.name, ...ident.main.alternatives])];
+  const [selected, setSelected] = useState(ident.main.name);
+  const [paused, setPaused] = useState(false);
+  const [draining, setDraining] = useState(false);
+  const done = useRef(false);
+  const finish = useCallback(
+    (name: string) => {
+      if (done.current) return;
+      done.current = true;
+      onDone(name);
+    },
+    [onDone],
+  );
+
+  useEffect(() => {
+    requestAnimationFrame(() => setDraining(true));
+  }, []);
+  useEffect(() => {
+    if (paused) return;
+    const t = setTimeout(() => finish(selected), CHOICE_SECONDS * 1000);
+    return () => clearTimeout(t);
+  }, [paused, selected, finish]);
+
+  return (
+    <StepCard step={1} title="Main object identified">
+      <p className="text-2xl font-semibold">{selected}</p>
+      {options.length > 1 && (
+        <select
+          aria-label="Main object"
+          value={selected}
+          onFocus={() => setPaused(true)}
+          onChange={(e) => {
+            setPaused(true);
+            setSelected(e.target.value);
+          }}
+          className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-sm"
+        >
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      )}
+      {paused ? (
+        <Button onClick={() => finish(selected)}>
+          Measure {selected} <ArrowRightIcon />
+        </Button>
+      ) : (
+        <div className="h-1 overflow-hidden rounded-full bg-neutral-100">
+          <div
+            className="h-full bg-neutral-900 transition-[width] ease-linear"
+            style={{ width: draining ? "0%" : "100%", transitionDuration: `${CHOICE_SECONDS}s` }}
+          />
+        </div>
+      )}
+      <Working>Looking for reference objects…</Working>
+    </StepCard>
   );
 }

@@ -4,6 +4,7 @@ import { images, referenceObjects } from "@snap-scale/db/schema/index";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import type { Context } from "../context";
 import { publicProcedure } from "../index";
 import { type Identification, identifyObjects, MeasureError, MODEL } from "../measure/analyze";
 import {
@@ -24,6 +25,14 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export const markedKey = (id: string, version: number) => `marked/${id}/${version}.png`;
 
 type PendingMarkers = Identification & { durationMs: number };
+
+async function loadOriginal(context: Context, id: string) {
+  const [row] = await context.db.select().from(images).where(eq(images.id, id));
+  if (!row) throw new ORPCError("NOT_FOUND");
+  const object = await context.images.get(row.key);
+  if (!object) throw new ORPCError("NOT_FOUND");
+  return { row, bytes: new Uint8Array(await object.arrayBuffer()) };
+}
 
 const point = z.tuple([z.number(), z.number()]);
 
@@ -94,20 +103,13 @@ export const imagesRouter = {
     return row;
   }),
 
-  /** gpt-5 names the objects, gpt-image draws marker dots; the browser then finds the dots. */
-  measure: publicProcedure
+  /** gpt-5 names the main object, other candidates and a reference with its real size. */
+  identify: publicProcedure
     .input(z.object({ id: z.string() }))
     .handler(async ({ input, context }) => {
-      const [row] = await context.db.select().from(images).where(eq(images.id, input.id));
-      if (!row) throw new ORPCError("NOT_FOUND");
-      const object = await context.images.get(row.key);
-      if (!object) throw new ORPCError("NOT_FOUND");
-      const bytes = new Uint8Array(await object.arrayBuffer());
-
-      const started = Date.now();
-      let identification: Identification;
+      const { row, bytes } = await loadOriginal(context, input.id);
       try {
-        identification = await identifyObjects({
+        return await identifyObjects({
           bytes,
           contentType: row.contentType,
           catalog: await context.db.select().from(referenceObjects),
@@ -115,21 +117,41 @@ export const imagesRouter = {
         });
       } catch (error) {
         if (error instanceof MeasureError) {
-          throw new ORPCError("UNPROCESSABLE_CONTENT", {
-            message: error.message,
-          });
+          throw new ORPCError("UNPROCESSABLE_CONTENT", { message: error.message });
         }
         throw error;
       }
+    }),
+
+  /** gpt-image draws marker dots on the chosen main object and reference; the browser then finds them. */
+  mark: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        identification: z.object({
+          main: z.object({ name: z.string().min(1), alternatives: z.array(z.string()) }),
+          reference: z.object({
+            name: z.string().min(1),
+            source: z.enum(["catalog", "web"]),
+            widthMm: z.number().positive(),
+            heightMm: z.number().positive(),
+          }),
+          notes: z.string(),
+        }),
+      }),
+    )
+    .handler(async ({ input, context }) => {
+      const { row, bytes } = await loadOriginal(context, input.id);
+      const started = Date.now();
       const marked = await drawMarkers({
         bytes,
         contentType: row.contentType,
         apiKey: context.openaiApiKey,
-        referenceName: identification.reference.name,
-        mainName: identification.main.name,
+        referenceName: input.identification.reference.name,
+        mainName: input.identification.main.name,
       });
       const pending: PendingMarkers = {
-        ...identification,
+        ...input.identification,
         durationMs: Date.now() - started,
       };
       const version = Date.now();
@@ -137,10 +159,9 @@ export const imagesRouter = {
         httpMetadata: { contentType: "image/png" },
         customMetadata: { pending: JSON.stringify(pending) },
       });
-      return { ...pending, version };
+      return { version };
     }),
 
-  /** Saves the dot positions the browser found; the size is computed here. */
   saveMarkers: publicProcedure
     .input(
       z.object({
