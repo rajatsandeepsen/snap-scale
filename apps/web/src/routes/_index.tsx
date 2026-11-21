@@ -3,9 +3,10 @@ import { Card, CardContent } from "@snap-scale/ui/components/card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImageUpIcon, Loader2, Trash2Icon } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
-import { ENV } from "@/env.public";
+import { formatMm, imageUrl } from "@/utils/image-url";
 import { orpc } from "@/utils/orpc";
 
 import type { Route } from "./+types/_index";
@@ -20,26 +21,28 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const imageUrl = (id: string) => `${ENV.VITE_SERVER_URL.replace(/\/$/, "")}/images/${id}`;
-
 export default function Home() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   const images = useQuery(orpc.images.list.queryOptions());
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: orpc.images.list.key() });
 
   const upload = useMutation(
     orpc.images.upload.mutationOptions({
-      onSuccess: () => {
-        toast.success("Image uploaded");
+      onSuccess: (row) => {
         invalidate();
+        navigate(`/images/${row.id}`);
       },
       onError: (error) => toast.error(error.message),
     }),
   );
-  const remove = useMutation(orpc.images.delete.mutationOptions({ onSuccess: invalidate }));
+  const remove = useMutation(
+    orpc.images.delete.mutationOptions({ onSuccess: invalidate }),
+  );
 
   const handleFiles = (files: FileList | null) => {
     const file = files?.[0];
@@ -57,8 +60,8 @@ export default function Home() {
       <div>
         <h1 className="text-xl font-semibold">snap-scale</h1>
         <p className="text-muted-foreground text-sm">
-          Upload a photo with a standard object (credit card, A4 sheet, coin) next to the thing you
-          want to measure.
+          Upload a photo with a standard object (credit card, A4 sheet, coin)
+          next to the thing you want to measure.
         </p>
       </div>
 
@@ -79,8 +82,14 @@ export default function Home() {
         ) : (
           <ImageUpIcon className="size-6" />
         )}
-        <span>{upload.isPending ? "Uploading..." : "Drop an image or click to choose"}</span>
-        <span className="text-muted-foreground text-xs">JPEG, PNG or WebP, up to 10 MB</span>
+        <span>
+          {upload.isPending
+            ? "Uploading..."
+            : "Drop an image or click to choose"}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          JPEG, PNG or WebP, up to 10 MB
+        </span>
       </button>
       <input
         ref={inputRef}
@@ -102,14 +111,18 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {images.data.map((image) => (
               <Card key={image.id} className="overflow-hidden py-0">
-                <img
-                  src={imageUrl(image.id)}
-                  alt={image.filename}
-                  className="aspect-square w-full object-cover"
-                />
+                <Link to={`/images/${image.id}`}>
+                  <img
+                    src={imageUrl(image.id)}
+                    alt={image.filename}
+                    className="aspect-square w-full object-cover"
+                  />
+                </Link>
                 <CardContent className="flex items-center justify-between gap-2 px-3 pb-3">
                   <span className="truncate text-xs" title={image.filename}>
-                    {image.filename}
+                    {image.analysis
+                      ? `${image.analysis.main.name}: ${formatMm(image.analysis.main.lengthMm)} × ${formatMm(image.analysis.main.widthMm)}`
+                      : image.filename}
                   </span>
                   <Button
                     variant="ghost"
