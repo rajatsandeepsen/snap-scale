@@ -28,17 +28,22 @@ export const imagesRouter = {
         customMetadata: { filename: input.file.name },
       });
 
-      const [row] = await context.db
-        .insert(images)
-        .values({
-          id,
-          key,
-          filename: input.file.name,
-          contentType: input.file.type,
-          size: input.file.size,
-        })
-        .returning();
-      return row!;
+      try {
+        const [row] = await context.db
+          .insert(images)
+          .values({
+            id,
+            key,
+            filename: input.file.name,
+            contentType: input.file.type,
+            size: input.file.size,
+          })
+          .returning();
+        return row!;
+      } catch (error) {
+        await context.images.delete(key);
+        throw error;
+      }
     }),
 
   list: publicProcedure.handler(({ context }) =>
