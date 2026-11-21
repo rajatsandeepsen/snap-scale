@@ -36,7 +36,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const serverWorker = yield* server;
+    // In prod, take over the Worker that Workers Builds created so the app is
+    // served at snap-scale.<subdomain>.workers.dev.
+    const prod = (yield* Alchemy.Stage) === "prod";
     const webWorker = yield* Cloudflare.Website.Vite("web", {
+      ...(prod ? { name: "snap-scale" } : {}),
       rootDir: "../../apps/web",
       compatibility: {
         flags: ["nodejs_compat"],
@@ -47,7 +51,7 @@ export default Alchemy.Stack(
       dev: {
         port: 5173,
       },
-    });
+    }).pipe(Alchemy.AdoptPolicy.adopt(prod));
 
     return {
       web: webWorker.url,
