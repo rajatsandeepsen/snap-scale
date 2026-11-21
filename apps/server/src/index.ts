@@ -107,7 +107,7 @@ app.get("/images/:id", async (c) => {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
-  headers.set("cache-control", "public, max-age=31536000, immutable");
+  headers.set("cache-control", "private, no-cache");
   return new Response(object.body, { headers });
 });
 
