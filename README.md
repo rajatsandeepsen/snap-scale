@@ -5,7 +5,7 @@
 Live: **https://snap-scale.rajat-ai.workers.dev/**
 
 <p align="center">
-  <img src="docs/screenshots/desktop-5-result.png" alt="Result: the blue notebook measured 19.0 × 11.8 cm next to a credit card" width="720" />
+  <img src="docs/screenshots/desktop-5-result.png" alt="Result: the blue notebook measured 19.2 × 11.9 cm next to a credit card" width="720" />
 </p>
 
 ## How it works for you
@@ -38,7 +38,7 @@ Every step shows up as a card in the middle of the screen. Each card slides in a
 
 ### 3. Get the size
 
-The final card says **"Dimension of blue notebook is 19.0 cm × 11.8 cm"**. The photo below it shows both objects outlined, each side's length, and the object's name in the middle.
+The final card says **"Dimension of blue notebook is 19.2 cm × 11.9 cm"**. The photo below it shows both objects outlined, each side's length, and the object's name in the middle.
 
 Switch units with one tap: **mm, cm, m, in, ft**. Your choice is remembered.
 
@@ -63,7 +63,7 @@ Tap **Next** for more you can do with the result:
 
 ### The test photo
 
-All of the screenshots above come from this photo: a credit card (85.6 × 54 mm) next to a notebook that is really **20 × 12 cm**. snap-scale measured it as 19.0–20.8 cm × 11.8–12.8 cm across runs.
+All of the screenshots above come from this photo: a credit card (85.6 × 54 mm) next to a notebook that is really **20 × 12 cm**. snap-scale measured it between 19.0 and 20.8 cm long and between 11.8 and 12.8 cm wide across test runs.
 
 <p align="center">
   <img src="docs/screenshots/test-photo.jpg" alt="Test photo: a red credit card next to a blue notebook on a wooden table" width="480" />
